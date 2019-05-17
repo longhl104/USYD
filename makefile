@@ -1,8 +1,5 @@
-fuse: fuse.out
-	echo "Fuse fuse mother fucker!"
-
-fuse.out: fuse.c
-	gcc -o myfuse -std=gnu11 -lfuse myfuse.c
+myfuse: myfuse.c
+	gcc -Wall -o myfuse myfuse.c `pkg-config fuse --cflags --libs`
 
 dummy: dummy.out
 	echo "Some shit built!"
