@@ -36,10 +36,13 @@ void dump(void* a) {
 
 }
 
-int main() {
-    int a = 3;
-    int* b = &a;
-    int c = *b;
-    printf("%d\n", c);
+int main(int argc, char** argv) {
+    printf("%d\n", argc);
+    int a[4] = {1,2,3,4};
+    int *b = a;
+    *(b+2) = 5;
+    for(int i=0;i<4;++i)
+        printf("%ls\n", &(*(a+3)));
+    // printf("%f\n", log(4)/log(2));
     return 0;
 }

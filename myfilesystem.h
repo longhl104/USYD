@@ -49,8 +49,8 @@ typedef struct Node { //16
 } Node;
 struct Helper {
     char f1[63], f2[63], f3[63];
-    int no_directory, no_block, no_node;
-    int size_file,size_hash,size_directory;
+    unsigned long int no_directory, no_block, no_node;
+    unsigned long int size_file,size_hash,size_directory;
     char file_data[4294967296];
     Node hash_data[33554431];
     Directory directory_table[65536];
