@@ -51,6 +51,7 @@ struct Helper {
     char f1[63], f2[63], f3[63];
     unsigned long int no_directory, no_block, no_node;
     unsigned long int size_file,size_hash,size_directory;
+    uint8_t hash_calculated;
     char* file_data;
     Node* hash_data;
     Directory* directory_table;

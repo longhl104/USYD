@@ -29,10 +29,9 @@ void dump(void* a) {
 
 }
 
-int f(int* a) {
-    int b = *a;
-    *a = *a + 5;
-    return b;
+void f(void* a) {
+    int* a = (int*) a;
+    printf("%d\n", *(a+1));
 }
 
 struct abc {
@@ -42,7 +41,7 @@ struct abc {
 };
 
 int main(int argc, char** argv) {
-    struct abc *a = (struct abc*) malloc(sizeof(struct abc)*4);
-    printf("%ld\n", sizeof(a));
+    int a[4] = {4,3,2,5};
+    f((void*)a);
     return 0;
 }

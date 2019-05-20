@@ -25,6 +25,7 @@ int compare_directory(const void *s1, const void *s2)
     return e1->offset - e2->offset;
 }
 void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
+    // printf("init_fs\n");
     f1 = my_truncate(f1);
     f2 = my_truncate(f2);
     f3 = my_truncate(f3);
@@ -98,19 +99,14 @@ void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
     fclose(fptr);
     // for(int i=0;i<helper.size_directory;++i)
     //     //printf("%s %d %d %d\n", helper.directory_table[i].file_name, helper.directory_table[i].offset, helper.directory_table[i].length, helper.directory_table[i].index);
-    compute_hash_tree((void*)&helper);
+    helper.no_block = helper.size_file/256;
+    unsigned long int n = (unsigned long int) log2(helper.no_block);
+    helper.no_node = ((1UL<<(n+1)) - 1);
+    helper.hash_calculated = 0;
     return (void*)&helper;
 }
-
-void close_fs(void * helper) {
-    struct Helper* h = (struct Helper*)helper;
-    free(h->file_data);
-    free(h->hash_data);
-    free(h->directory_table);
-    free(h->real_directory);
-}
-
 void write_data(void* helper) {
+
     FILE* fptr;
     fptr = fopen(((struct Helper *)helper)->f1, "wb");
     fwrite(((struct Helper *)helper)->file_data, sizeof(char), ((struct Helper *)helper)->size_file, fptr);
@@ -130,6 +126,18 @@ void write_data(void* helper) {
         //printf("%s %d %d %d\n", ((struct Helper*)helper)->directory_table[i].file_name, ((struct Helper*)helper)->directory_table[i].offset, ((struct Helper*)helper)->directory_table[i].length, ((struct Helper*)helper)->directory_table[i].index);
     //printf("###########################\n");
 }
+
+void close_fs(void * helper) {
+    // printf("close_fs\n");
+    write_data(helper);
+    struct Helper* h = (struct Helper*)helper;
+    free(h->file_data);
+    free(h->hash_data);
+    free(h->directory_table);
+    free(h->real_directory);
+}
+
+
 void assign_data(int offset, int length, void* helper) {
     for(int i=0;i<length;++i)
         ((struct Helper*)helper)->file_data[offset+i] = '\0';
@@ -140,6 +148,8 @@ int is_empty_directory(Directory* a) {
     return 0;
 }
 int create_file(char * filename, size_t length, void * helper) {
+    // printf("create_file\n");
+
     //printf("create_file %s %ld\n", filename, length);
     struct Helper* h = (struct Helper*)helper;
     filename = my_truncate(filename);
@@ -235,6 +245,8 @@ void swap_char(char* a, int x, int y) {
     a[y] = t;
 }
 int resize_file(char * filename, size_t length, void * helper) {
+    // printf("resize_file\n");
+
     //printf("resize_file %s %ld\n", filename, length);
     struct Helper* h = (struct Helper*)helper;
     filename = my_truncate(filename);
@@ -306,6 +318,8 @@ int resize_file(char * filename, size_t length, void * helper) {
 }
 
 void repack(void * helper) {
+    // printf("repack\n");
+
     //printf("repack\n");
     struct Helper* h = (struct Helper*)helper;
     // Directory my_directory_table[((struct Helper *)helper)->no_directory];
@@ -324,6 +338,8 @@ void repack(void * helper) {
 }
 
 int delete_file(char * filename, void * helper) {
+    // printf("delete_file\n");
+
     // printf("delete_file %s\n", filename);
     struct Helper* h = (struct Helper*)helper;
     int pos = file_exist(filename, helper);
@@ -340,6 +356,8 @@ int delete_file(char * filename, void * helper) {
 }
 
 int rename_file(char * oldname, char * newname, void * helper) {
+    // printf("rename_file\n");
+
     int index = file_exist(oldname, helper);
     if(index==-1 || file_exist(newname, helper) != -1)
         return 1;
@@ -349,6 +367,8 @@ int rename_file(char * oldname, char * newname, void * helper) {
 }
 
 int read_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
+    // printf("read_file\n");
+
     //printf("%s %ld %ld\n", filename, offset, count);
     struct Helper* h = (struct Helper*)helper;
     int index = file_exist(filename, helper);
@@ -358,6 +378,18 @@ int read_file(char * filename, size_t offset, size_t count, void * buf, void * h
         return 2;
     if(offset + count > h->real_directory[index].length)
         return 2;
+    Node* old_hash_data = malloc(sizeof(Node)*h->no_node);
+    memcpy(old_hash_data, h->hash_data, sizeof(Node)*h->no_node);
+    for(int i=(h->real_directory[index].offset+offset)/256;i<=(h->real_directory[index].offset+offset+count)/256;++i)
+        compute_hash_block(i, helper);
+    for(int i=0;i<h->no_node;++i)
+        for(int j=0;j<16;++j)
+            if(old_hash_data[i].byte[j]!=h->hash_data[i].byte[j]) {
+                memcpy(h->hash_data, old_hash_data, sizeof(Node)*h->no_node);
+                free(old_hash_data);
+                return 3;
+            }
+    free(old_hash_data);
     FILE* fptr;
     char dummy;
     fptr = fopen(h->f1, "rb");
@@ -365,10 +397,13 @@ int read_file(char * filename, size_t offset, size_t count, void * buf, void * h
         fread(&dummy, sizeof(char), 1, fptr);
     fread(buf, sizeof(char), count, fptr);
     fclose(fptr);
+
     return 0;
 }
 
 int write_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
+    // printf("write_file\n");
+
     struct Helper* h = (struct Helper*)helper;
     char* buff = (char*) buf;
     int index = file_exist(filename, helper);
@@ -398,6 +433,8 @@ int write_file(char * filename, size_t offset, size_t count, void * buf, void * 
 }
 
 ssize_t file_size(char * filename, void * helper) {
+    // printf("file_size\n");
+
     struct Helper* h = (struct Helper*) helper;
     for(int i=0;i<h->size_directory;++i) {
         if(strcmp(h->directory_table[i].file_name, filename) == 0)
@@ -424,7 +461,9 @@ void fletcher(uint8_t * buf, size_t length, uint8_t * output) {
 }
 
 void compute_hash_tree(void * helper) {
+    // printf("compute_hash_tree\n");
     struct Helper* h = (struct Helper*) helper;
+    h->hash_calculated = 1;
     for(int i=0;i<h->size_hash;++i)
         for(int j=0;j<16;++j)
             h->hash_data[i].byte[j] = 0;
@@ -447,6 +486,8 @@ void compute_hash_tree(void * helper) {
 
 void compute_hash_block(size_t block_offset, void * helper) {
     struct Helper* h = (struct Helper*) helper;
+    if(h->hash_calculated == 0)
+        compute_hash_tree(helper);
     unsigned long int index = block_offset + h->no_node - h->no_block;
     while(index>0) {
         if(index%2==0) {
@@ -457,5 +498,6 @@ void compute_hash_block(size_t block_offset, void * helper) {
             index = (index-1)>>1;
         }
     }
+    write_data(helper);
     return;
 }
