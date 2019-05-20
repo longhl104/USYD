@@ -28,9 +28,9 @@ void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
     f1 = my_truncate(f1);
     f2 = my_truncate(f2);
     f3 = my_truncate(f3);
-    if (f1 == f2 || f2 == f3 || f3 == f1) {
-        ////printf("%s\n", strerror(errno));
-        return NULL;
+    if (strcmp(f1,f2) == 0 || strcmp(f2,f3) == 0 || strcmp(f3,f1) == 0) {
+        printf("%s\n", strerror(errno));
+        return (void*)&helper;;
     }
     strcpy(helper.f1,f1);
     strcpy(helper.f2,f2);
@@ -38,58 +38,76 @@ void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
 
     FILE *fptr;
     if ((fptr = fopen(f1,"rb")) == NULL) {
-        ////printf("%s\n", strerror(errno));
-        return NULL;
+        printf("%s\n", strerror(errno));
+        return (void*)&helper;
     }
+    fseek(fptr, 0L, SEEK_END);
+    int sz = ftell(fptr);
+
+    helper.file_data = (char*)malloc(ftell(fptr));
     helper.size_file = 0;
     char dummy;
-    while(fread(&dummy, sizeof(char), 1, fptr)) {
+    fclose(fptr);
+    fptr = fopen(f1,"rb");
+    while(sz>0 && fread(&dummy, sizeof(char), 1, fptr)) {
         helper.file_data[helper.size_file++] = dummy;
     }
     helper.no_block = helper.size_file/256;
     fclose(fptr);
     //////////////////////////////////////////////////
     if ((fptr = fopen(f2,"rb")) == NULL) {
-        //printf("%s\n", strerror(errno));
-        return NULL;
+        printf("%s\n", strerror(errno));
+        return (void*)&helper;
     }
+    fseek(fptr, 0L, SEEK_END);
+    sz = ftell(fptr);
+    helper.directory_table = malloc((sz/72)*76);
+    helper.real_directory = malloc((sz/72)*76);
     Directory dummy2;
     helper.no_directory = 0;
     helper.size_directory = 0;
-    while(fread(&dummy2, 72, 1, fptr)) {
-        // //printf("%s %d %d %d\n", dummy2.file_name, dummy2.offset, dummy2.length, dummy2.index);
+    fclose(fptr);
+    fptr = fopen(f2,"rb");
+    while(sz>0 && fread(&dummy2, 72, 1, fptr)) {
         if(strcmp(dummy2.file_name,"")!=0||dummy2.offset!=0||dummy2.length!=0) {
             helper.real_directory[helper.no_directory++] = dummy2;
             helper.real_directory[helper.no_directory-1].index = helper.size_directory;
         }
         helper.directory_table[helper.size_directory++] = dummy2;
     }
+
     qsort(helper.real_directory,helper.no_directory,sizeof(Directory),compare_directory);
     fclose(fptr);
     // ////////////////////////////////////////////////////
     if ((fptr = fopen(f3,"rb")) == NULL) {
-        //printf("%s\n", strerror(errno));
-        return NULL;
+        printf("%s\n", strerror(errno));
+        return (void*)&helper;
     }
+
+    fseek(fptr, 0L, SEEK_END);
+    sz = ftell(fptr);
+    helper.hash_data = (Node*)malloc(sz);
+
     Node dummy3;
     helper.size_hash = 0;
-    while(fread(&dummy3, sizeof(Node), 1, fptr)) {
+    fclose(fptr);
+    fptr = fopen(f3,"rb");
+    while(sz>0 && fread(&dummy3, sizeof(Node), 1, fptr)) {
         helper.hash_data[helper.size_hash++] = dummy3;
     }
     fclose(fptr);
     // for(int i=0;i<helper.size_directory;++i)
     //     //printf("%s %d %d %d\n", helper.directory_table[i].file_name, helper.directory_table[i].offset, helper.directory_table[i].length, helper.directory_table[i].index);
+    compute_hash_tree((void*)&helper);
     return (void*)&helper;
 }
 
 void close_fs(void * helper) {
-    // ((struct Helper*)helper)->no_directory = 0;
-    // ((struct Helper*)helper)->size_directory = 0;
-    // ((struct Helper*)helper)->size_file = 0;
-    // ((struct Helper*)helper)->no_block = 0;
-    // ((struct Helper*)helper)->no_node = 0;
-    // ((struct Helper*)helper)->size_hash = 0;
-    return;
+    struct Helper* h = (struct Helper*)helper;
+    free(h->file_data);
+    free(h->hash_data);
+    free(h->directory_table);
+    free(h->real_directory);
 }
 
 void write_data(void* helper) {
@@ -97,9 +115,10 @@ void write_data(void* helper) {
     fptr = fopen(((struct Helper *)helper)->f1, "wb");
     fwrite(((struct Helper *)helper)->file_data, sizeof(char), ((struct Helper *)helper)->size_file, fptr);
     fclose(fptr);
+
     fptr = fopen(((struct Helper *)helper)->f2, "wb");
     for(int i=0; i<((struct Helper *)helper)->size_directory;++i) {
-        fwrite(((struct Helper *)(helper+76*i))->directory_table, 72, 1, fptr);
+        fwrite(((struct Helper *)helper)->directory_table + i, 72, 1, fptr);
     }
 
     fclose(fptr);
@@ -132,6 +151,7 @@ int create_file(char * filename, size_t length, void * helper) {
     if(h->no_directory == h->size_directory)
         return 2;
     int res = -1;
+    //printf("%ld %ld\n", h->no_directory, h->size_directory);
     if(h->no_directory ==0) {
         if(length<=h->size_file) {
             h->directory_table[0].offset = 0;
@@ -141,7 +161,9 @@ int create_file(char * filename, size_t length, void * helper) {
             h->real_directory[0] = h->directory_table[0];
             h->real_directory[0].index = 0;
             assign_data(0,length,helper);
+            compute_hash_tree(helper);
             write_data(helper);
+            //printf("fuck\n");
             return 0;
         } else return 2;
     }
@@ -172,6 +194,7 @@ int create_file(char * filename, size_t length, void * helper) {
                 assign_data(res,length,helper);
                 break;
             }
+        compute_hash_tree(helper);
         write_data(helper);
         return 0;
     }
@@ -193,6 +216,7 @@ int create_file(char * filename, size_t length, void * helper) {
                 assign_data(res,length,helper);
                 break;
             }
+        compute_hash_tree(helper);
         write_data(helper);
         return 0;
     } else return 2;
@@ -272,8 +296,10 @@ int resize_file(char * filename, size_t length, void * helper) {
             }
         }
     }
-    if(res == 0)
+    if(res == 0) {
+        compute_hash_tree(helper);
         write_data(helper);
+    }
     // for(int i=0;i<h->size_directory;++i)
     //     //printf("%s %d %d %d\n", h->directory_table[i].file_name, h->directory_table[i].offset, h->directory_table[i].length, h->directory_table[i].index);
     return res;
@@ -292,6 +318,7 @@ void repack(void * helper) {
         h->directory_table[h->real_directory[i].index].offset = pos;
         pos+=h->real_directory[i].length;
     }
+    compute_hash_tree(helper);
     write_data(helper);
     return;
 }
@@ -322,6 +349,7 @@ int rename_file(char * oldname, char * newname, void * helper) {
 }
 
 int read_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
+    //printf("%s %ld %ld\n", filename, offset, count);
     struct Helper* h = (struct Helper*)helper;
     int index = file_exist(filename, helper);
     if(index == -1)
@@ -365,6 +393,7 @@ int write_file(char * filename, size_t offset, size_t count, void * buf, void * 
     fptr = fopen(h->f1, "wb");
     fwrite(h->file_data, sizeof(char), h->size_file, fptr);
     fclose(fptr);
+    compute_hash_tree(helper);
     return 0;
 }
 
@@ -408,17 +437,17 @@ void compute_hash_tree(void * helper) {
     for(int i=(1UL<<(n))-2;i>=0;--i) {
         fletcher((uint8_t*)(h->hash_data+2*i+1),32,(uint8_t*)(h->hash_data+i));
     }
-    for(int i=0;i<h->size_hash;++i)
-        for(int j=0;j<16;++j)
-            printf("%d ", h->hash_data[i].byte[j]);
-    printf("\n");
+    // for(int i=0;i<h->size_hash;++i)
+    //     for(int j=0;j<16;++j)
+    //         printf("%d ", h->hash_data[i].byte[j]);
+    // printf("\n");
     write_data(helper);
     return;
 }
 
 void compute_hash_block(size_t block_offset, void * helper) {
-    unsigned long int index = (unsigned long int) block_offset;
     struct Helper* h = (struct Helper*) helper;
+    unsigned long int index = block_offset + h->no_node - h->no_block;
     while(index>0) {
         if(index%2==0) {
             fletcher((uint8_t*)(h->hash_data+index-1),32,(uint8_t*)(h->hash_data+(index-2)/2));

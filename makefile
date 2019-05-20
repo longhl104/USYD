@@ -1,5 +1,8 @@
-myfuse: myfuse.c
-	gcc -Wall -o myfuse myfuse.c `pkg-config fuse --cflags --libs`
+myfuse: myfuse.out
+	./myfuse -d mountpoint --files file_data directory_table hash_data
+
+myfuse.out: myfuse.c myfilesystem.c myfilesystem.h
+	gcc -Wall -o myfuse myfuse.c myfilesystem.c `pkg-config fuse --cflags --libs` -lm
 
 dummy: dummy.out
 	echo "Some shit built!"

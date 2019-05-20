@@ -15,7 +15,7 @@ int failure() {
 }
 
 int no_operation() {
-    void * helper = init_fs("file_data", "directory_table", "hash_data", 1); // Remember you need to provide your own test files and also check their contents as part of testing
+    void * helper = init_fs("file1", "directory_table", "hash_data", 1); // Remember you need to provide your own test files and also check their contents as part of testing
     close_fs(helper);
     return 0;
 }
@@ -72,6 +72,13 @@ int test_hash() {
     close_fs(helper);
     return 0;
 }
+
+int test_block_hash() {
+    void * helper = init_fs("12_file_data", "12_directory_table", "12_hash_data", 4);
+    compute_hash_block(0, helper);
+    close_fs(helper);
+    return 0;
+}
 /****************************/
 
 /* Helper function */
@@ -98,7 +105,8 @@ int main(int argc, char * argv[]) {
     // TEST(test_resize);
     // TEST(test_read_file);
     // TEST(test_resize_repack);
-    TEST(test_hash);
+    // TEST(test_hash);
+    TEST(test_block_hash);
 
     return 0;
 }
