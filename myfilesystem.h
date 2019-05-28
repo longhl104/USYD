@@ -2,6 +2,7 @@
 #define MYFILESYSTEM_H
 #include <sys/types.h>
 #include <stdint.h>
+#include <pthread.h>
 
 void * init_fs(char * f1, char * f2, char * f3, int n_processors);
 

@@ -7,6 +7,8 @@
 #include <math.h>
 #include "myfilesystem.h"
 
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
 char* my_truncate(char* a) {
     if(sizeof(a)>MAX_LENGTH_FILE_NAME) {
         char* b = (char*) malloc(MAX_LENGTH_FILE_NAME+1);
@@ -237,7 +239,7 @@ int file_exist(char* filename, void *helper) {
     for(int i=0;i<h->no_directory;++i)
         if(strcmp(filename, h->real_directory[i].file_name ) == 0)
             return i;
-    return -1;
+    return -1;;
 }
 void swap_char(char* a, int x, int y) {
     char t = a[x];
@@ -345,14 +347,18 @@ int delete_file(char * filename, void * helper) {
     int pos = file_exist(filename, helper);
     if(pos==-1)
         return 1;
-    strcpy(h->directory_table[h->real_directory[pos].index].file_name, "");
-    h->directory_table[h->real_directory[pos].index].offset = 0;
-    h->directory_table[h->real_directory[pos].index].length = 0;
-    for(int i=pos+1;i<h->no_directory;++i)
-        h->real_directory[i-1] = h->real_directory[i];
-    --h->no_directory;
-    write_data(helper);
-    return 0;
+    if(h->no_directory>0)
+    {
+        strcpy(h->directory_table[h->real_directory[pos].index].file_name, "");
+        h->directory_table[h->real_directory[pos].index].offset = 0;
+        h->directory_table[h->real_directory[pos].index].length = 0;
+        for(int i=pos+1;i<h->no_directory;++i)
+            h->real_directory[i-1] = h->real_directory[i];
+        --h->no_directory;
+        write_data(helper);
+        return 0;
+    }
+    return 1;
 }
 
 int rename_file(char * oldname, char * newname, void * helper) {
@@ -403,32 +409,51 @@ int read_file(char * filename, size_t offset, size_t count, void * buf, void * h
 
 int write_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
     // printf("write_file\n");
-
+    pthread_mutex_lock(&lock);
     struct Helper* h = (struct Helper*)helper;
+    // printf("%s\n", h->file_data);
+    // printf("write_file %s %ld %ld %s\n", filename, offset, count, (char*)buf);
     char* buff = (char*) buf;
     int index = file_exist(filename, helper);
-    if(index == -1)
+    if(index == -1) {
+        compute_hash_tree(helper);
+        pthread_mutex_unlock(&lock);
         return 1;
-    if(offset >= h->real_directory[index].length)
+    }
+    if(offset > h->real_directory[index].length){
+        compute_hash_tree(helper);
+        pthread_mutex_unlock(&lock);
         return 2;
+    }
     FILE* fptr;
-    fptr = fopen(h->f1, "rb");
-    if(offset + count >= h->real_directory[index].length) {
-        if(resize_file(filename, count, helper) == 2)
+    if(offset + count > h->real_directory[index].length) {
+        // printf("jlala jfad\n");
+        int total = 0;
+        for(int i=0;i<h->no_directory;++i)
+            if(i!=index)
+                total += h->real_directory[i].length;
+        if(total + offset + count > h->size_file) {
+            compute_hash_tree(helper);
+            pthread_mutex_unlock(&lock);
             return 3;
+        }
+        resize_file(filename, offset + count, helper);
         for(int i=0;i<count;++i) {
+            index = file_exist(filename, helper);
+            // printf("%ld\n", h->real_directory[index].offset+offset+i);
             h->file_data[h->real_directory[index].offset+offset+i] = *(buff+i);
         }
     } else {
         for(int i=0;i<count;++i) {
+            // printf("%ld\n", h->real_directory[index].offset+offset+i);
             h->file_data[h->real_directory[index].offset+offset+i] = *(buff+i);
         }
     }
-
     fptr = fopen(h->f1, "wb");
     fwrite(h->file_data, sizeof(char), h->size_file, fptr);
     fclose(fptr);
     compute_hash_tree(helper);
+    pthread_mutex_unlock(&lock);
     return 0;
 }
 
@@ -486,8 +511,13 @@ void compute_hash_tree(void * helper) {
 
 void compute_hash_block(size_t block_offset, void * helper) {
     struct Helper* h = (struct Helper*) helper;
-    if(h->hash_calculated == 0)
+    if(h->hash_calculated == 0) {
+        // for(int i=0;i<h->no_node;++i) {
+        //     for(int j=0;j<16;++j)
+        //         printf("%d ", (uint8_t)h->hash_data[i][j]);
+        // }
         compute_hash_tree(helper);
+    }
     unsigned long int index = block_offset + h->no_node - h->no_block;
     while(index>0) {
         if(index%2==0) {

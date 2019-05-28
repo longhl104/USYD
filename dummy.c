@@ -28,11 +28,11 @@ void dump(void* a) {
     }
 
 }
-
-void f(void* a) {
-    int* a = (int*) a;
-    printf("%d\n", *(a+1));
-}
+//
+// void f(void* a) {
+//     int* a = (int*) a;
+//     printf("%d\n", *(a+1));
+// }
 
 struct abc {
     int a;
@@ -41,7 +41,9 @@ struct abc {
 };
 
 int main(int argc, char** argv) {
-    int a[4] = {4,3,2,5};
-    f((void*)a);
+    char a[4] = "abcd";
+    char b[6] = "aaaaaa";
+    strcpy(b,"abcd");
+    printf("%s\n", b);
     return 0;
 }
