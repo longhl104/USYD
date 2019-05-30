@@ -100,12 +100,12 @@ int main(int argc, char * argv[]) {
     // TEST(no_operation);
 
     // Add more tests here
-    // TEST(test_create_file);
-    // TEST(test_create_exist);
-    // TEST(test_resize);
-    // TEST(test_read_file);
-    // TEST(test_resize_repack);
-    // TEST(test_hash);
+    TEST(test_create_file);
+    TEST(test_create_exist);
+    TEST(test_resize);
+    TEST(test_read_file);
+    TEST(test_resize_repack);
+    TEST(test_hash);
     TEST(test_block_hash);
 
     return 0;
