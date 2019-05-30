@@ -4,17 +4,21 @@
 #include <string.h>
 #include <errno.h>
 #include "myfilesystem.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 
-char* truncate(char* a) {
-    if(sizeof(a)>MAX_LENGTH_FILE_NAME) {
-        char* b = (char*) malloc(MAX_LENGTH_FILE_NAME);
-        for(int i = 0;i<MAX_LENGTH_FILE_NAME;++i)
-            b[i] = a[i];
-        return b;
-    }
-    return a;
-}
+// char* truncate(char* a) {
+//     if(sizeof(a)>MAX_LENGTH_FILE_NAME) {
+//         char* b = (char*) malloc(MAX_LENGTH_FILE_NAME);
+//         for(int i = 0;i<MAX_LENGTH_FILE_NAME;++i)
+//             b[i] = a[i];
+//         return b;
+//     }
+//     return a;
+// }
 
 void swap_char(char* a, int x, int y) {
     char t = a[x];
@@ -41,9 +45,6 @@ struct abc {
 };
 
 int main(int argc, char** argv) {
-    char a[4] = "abcd";
-    char b[6] = "aaaaaa";
-    strcpy(b,"abcd");
-    printf("%s\n", b);
+    printf("%d\n", open("output", O_RDWR, S_IRWXU));
     return 0;
 }

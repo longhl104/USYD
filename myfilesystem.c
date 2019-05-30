@@ -27,7 +27,6 @@ int compare_directory(const void *s1, const void *s2)
     return e1->offset - e2->offset;
 }
 void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
-    // printf("init_fs\n");
     f1 = my_truncate(f1);
     f2 = my_truncate(f2);
     f3 = my_truncate(f3);
@@ -99,8 +98,6 @@ void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
         helper.hash_data[helper.size_hash++] = dummy3;
     }
     fclose(fptr);
-    // for(int i=0;i<helper.size_directory;++i)
-    //     //printf("%s %d %d %d\n", helper.directory_table[i].file_name, helper.directory_table[i].offset, helper.directory_table[i].length, helper.directory_table[i].index);
     helper.no_block = helper.size_file/256;
     unsigned long int n = (unsigned long int) log2(helper.no_block);
     helper.no_node = ((1UL<<(n+1)) - 1);
@@ -108,7 +105,6 @@ void * init_fs(char * f1, char * f2, char * f3, int n_processors) {
     return (void*)&helper;
 }
 void write_data(void* helper) {
-
     FILE* fptr;
     fptr = fopen(((struct Helper *)helper)->f1, "wb");
     fwrite(((struct Helper *)helper)->file_data, sizeof(char), ((struct Helper *)helper)->size_file, fptr);
@@ -235,6 +231,7 @@ int create_file(char * filename, size_t length, void * helper) {
 }
 
 int file_exist(char* filename, void *helper) {
+    filename = my_truncate(filename);
     struct Helper* h = (struct Helper*)helper;
     for(int i=0;i<h->no_directory;++i)
         if(strcmp(filename, h->real_directory[i].file_name ) == 0)
@@ -250,6 +247,7 @@ int resize_file(char * filename, size_t length, void * helper) {
     // printf("resize_file\n");
 
     //printf("resize_file %s %ld\n", filename, length);
+    filename = my_truncate(filename);
     struct Helper* h = (struct Helper*)helper;
     filename = my_truncate(filename);
     int pos = file_exist(filename, helper);
@@ -343,6 +341,7 @@ int delete_file(char * filename, void * helper) {
     // printf("delete_file\n");
 
     // printf("delete_file %s\n", filename);
+    filename = my_truncate(filename);
     struct Helper* h = (struct Helper*)helper;
     int pos = file_exist(filename, helper);
     if(pos==-1)
@@ -363,27 +362,35 @@ int delete_file(char * filename, void * helper) {
 
 int rename_file(char * oldname, char * newname, void * helper) {
     // printf("rename_file\n");
-
+    struct Helper* h = (struct Helper*)helper;
+    oldname = my_truncate(oldname);
+    newname = my_truncate(newname);
     int index = file_exist(oldname, helper);
     if(index==-1 || file_exist(newname, helper) != -1)
         return 1;
-    strcpy(((struct Helper *)helper)->directory_table[index].file_name,newname);
+    strcpy(h->real_directory[index].file_name,newname);
+    strcpy(h->directory_table[h->real_directory[index].index].file_name, newname);
     write_data(helper);
     return 0;
 }
 
 int read_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
-    // printf("read_file\n");
-
-    //printf("%s %ld %ld\n", filename, offset, count);
+    pthread_mutex_lock(&lock);
+    filename = my_truncate(filename);
     struct Helper* h = (struct Helper*)helper;
     int index = file_exist(filename, helper);
-    if(index == -1)
+    if(index == -1) {
+        pthread_mutex_unlock(&lock);
         return 1;
-    if(offset<0 || offset >= h->real_directory[index].length)
+    }
+    if(offset<0 || offset >= h->real_directory[index].length) {
+        pthread_mutex_unlock(&lock);
         return 2;
-    if(offset + count > h->real_directory[index].length)
+    }
+    if(offset + count > h->real_directory[index].length) {
+        pthread_mutex_unlock(&lock);
         return 2;
+    }
     Node* old_hash_data = malloc(sizeof(Node)*h->no_node);
     memcpy(old_hash_data, h->hash_data, sizeof(Node)*h->no_node);
     for(int i=(h->real_directory[index].offset+offset)/256;i<=(h->real_directory[index].offset+offset+count)/256;++i)
@@ -393,6 +400,7 @@ int read_file(char * filename, size_t offset, size_t count, void * buf, void * h
             if(old_hash_data[i].byte[j]!=h->hash_data[i].byte[j]) {
                 memcpy(h->hash_data, old_hash_data, sizeof(Node)*h->no_node);
                 free(old_hash_data);
+                pthread_mutex_unlock(&lock);
                 return 3;
             }
     free(old_hash_data);
@@ -403,12 +411,13 @@ int read_file(char * filename, size_t offset, size_t count, void * buf, void * h
         fread(&dummy, sizeof(char), 1, fptr);
     fread(buf, sizeof(char), count, fptr);
     fclose(fptr);
-
+    pthread_mutex_unlock(&lock);
     return 0;
 }
 
 int write_file(char * filename, size_t offset, size_t count, void * buf, void * helper) {
     // printf("write_file\n");
+    filename = my_truncate(filename);
     pthread_mutex_lock(&lock);
     struct Helper* h = (struct Helper*)helper;
     // printf("%s\n", h->file_data);
@@ -459,7 +468,7 @@ int write_file(char * filename, size_t offset, size_t count, void * buf, void * 
 
 ssize_t file_size(char * filename, void * helper) {
     // printf("file_size\n");
-
+    filename = my_truncate(filename);
     struct Helper* h = (struct Helper*) helper;
     for(int i=0;i<h->size_directory;++i) {
         if(strcmp(h->directory_table[i].file_name, filename) == 0)
